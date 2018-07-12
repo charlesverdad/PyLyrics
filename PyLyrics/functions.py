@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup, Comment, NavigableString
-import sys, codecs, json
+import sys, codecs, json, re
 
 class Track(object):
 	def __init__(self,trackName,album,artist):
@@ -69,13 +69,36 @@ class PyLyrics:
 		songs =[Track(song.text,album,album.artist()) for song in currentAlbum.findNext('songs').findAll('item')]
 		return songs
 
+	def _searchSong(singer, song):
+		"""
+		Searches for the song using the wikia search bar function.
+		Returns the wikia link of the first song result as
+		"""
+		singer = ''.join([c for c in singer if c.isalnum() or c == ' '])
+		song = ''.join([c for c in song if c.isalnum() or c == ' '])
+		tokens = singer.split(' ') + song.split(' ')
+		query = '+'.join(tokens)
+		r = requests.get('http://lyrics.wikia.com/wiki/Special:Search?search={}'.format(query))
+		soup = BeautifulSoup(r.text, 'html.parser')
+		resultsSoup = soup.find('ul', {'class': 'Results'})
+		for a in resultsSoup.findAll('a', {'class': 'result-link'}, href=True):
+			if re.match(r'http://lyrics.wikia.com/wiki/(.*):(.*)', a['href']):
+				return a['href']
+
+		return None
+
 	@staticmethod
 	def getLyrics(singer, song):
-		#Replace spaces with _
-		singer = singer.replace(' ', '_')
-		song = song.replace(' ', '_')
-		r = requests.get('http://lyrics.wikia.com/{0}:{1}'.format(singer,song))
-		s = BeautifulSoup(r.text)
+		# r = requests.get('http://lyrics.wikia.com/{0}:{1}'.format(singer,song))
+		link = PyLyrics._searchSong(singer, song)
+		if link is None:
+			# In case search did not find a link, try making one.md
+			#Replace spaces with _
+			singer = singer.replace(' ', '_')
+			song = song.replace(' ', '_')
+			link = 'http://lyrics.wikia.com/{0}:{1}'.format(singer,song)
+		r = requests.get(link)
+		s = BeautifulSoup(r.text, 'html.parser')
 		#Get main lyrics holder
 		lyrics = s.find("div",{'class':'lyricbox'})
 		if lyrics is None:
